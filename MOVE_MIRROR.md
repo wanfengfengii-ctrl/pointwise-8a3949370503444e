@@ -37,3 +37,16 @@
 齐备后甲为 `storm` 一笔 3 L，乙为 `cooling` 一笔 9 L 和 `effluent` 一笔 4 L。乙的 X 继续使用甲表原位及原接纳修订。随后收 B1 或重投 B3，乙正式账仍为两笔 13 L。原发行 `A2` 仍可查到两笔 9 L，`B3` 固定账始终为两笔 13 L。
 
 用独立镜像演练两种到件顺序，断源后重开。可通过 `MirrorRepository(before_commit=...)` 在补齐的一次接纳中注入异常，重开应仍是原实收和待齐账，重送后再完成。夹具提供 `CommitGate` 控制此异常。联合核验也覆盖转记首执重领、失效旧像、矛盾绑定及原件回归。原回归和原交班演练保留原运行命令。`.pointwise-runtime.json` 的 `verify` 接通原回归和转记核验，`demo` 展示到件前后账面及重试结果，检查失败须退出非零。
+
+## 实现说明：V2 编码与校验覆盖
+
+`transfers` 是对象列表，每条恰好包含 `transfer_id`、`identity`（`partition/source/batch/position`）、`from_partition`、`to_partition`、`from_revision`、`to_revision`、`row` 与 `current`。`row` 与 `current` 使用与账面明细相同的 `{category, liters, provenance}` 结构；`current` 在移出侧为 `null`，在移入侧为该区版中的完整现值。
+
+- 清单 `transfers_sha256` 覆盖按 `(transfer_id, from_partition, to_partition)` 排序后各条记录的规范 JSON。账面摘要仍只覆盖账面。两项摘要与 `ledger_sha256` 一并覆盖信封中全部业务内容。
+- 移出侧记录必须含 `from_partition` 本区、`row` 为移出前最终行、`current` 为 `null`，且原序中不得再出现该原位。
+- 移入侧记录必须含 `to_partition` 本区、`row` 与 `current` 一致，且该原位在账面中恰好出现一次。
+- 每条记录内 `row.provenance.partition == from_partition`，`accepted_revision <= from_revision`。两区都须在本次区版前已执行该转记（`manifest.revision >= 对应侧修订`）。
+- 账面中移入行按 `to_revision` 单独占序，其余行按原接纳修订与批内位置升序；移出行的缺失位置仍计入原批的连续位置校验。
+- 镜像拒绝：重复转记号、同一原位绑定两个转记、已知记录与新件字段矛盾（`transfer_binding_conflict`）、某区已达该侧转记修订却缺该记录（`missing_transfer_evidence`）、账面与 `current` 不符（`transfer_row_mismatch`）。这些拒绝都不留下实收、转记进度或正式账变化。
+
+V1 件（`version: 1`）不携带 `transfers`；等价账面仍可按原规则实收。历史 V1 件在已知转记后仍可实收，只确认其所属分区，不推进另一侧。

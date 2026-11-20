@@ -2,6 +2,15 @@
   "version": 1,
   "kind": "cli",
   "setup": [],
-  "verify": ["python3", "-B", "check_project.py"],
-  "demo": ["python3", "-B", "-m", "examples.shift"]
+  "verify": [
+    "python3",
+    "-B",
+    "check_transfer.py"
+  ],
+  "demo": [
+    "python3",
+    "-B",
+    "-m",
+    "examples.transfer_demo"
+  ]
 }

@@ -2,7 +2,9 @@ from dataclasses import dataclass
 
 from warehouse.catalog.partitions import require_partition
 from warehouse.catalog.repository import CatalogRepository, require_registry
-from warehouse.facts.repository import BatchEvent, FactRepository
+from warehouse.facts.repository import (
+    BatchEvent, FactRepository, TransferInEvent, TransferOutEvent,
+)
 from warehouse.facts.rows import MeasurementRow, normalize_batch_rows, replace_measurement
 
 
@@ -23,6 +25,11 @@ def read_fact_revision(catalog: CatalogRepository, facts: FactRepository,
         if isinstance(event, BatchEvent):
             for row in normalize_batch_rows(partition, event.source, event.batch, event.revision, event.readings):
                 rows[row.identity] = row
+        elif isinstance(event, TransferOutEvent):
+            rows.pop(event.identity, None)
+        elif isinstance(event, TransferInEvent):
+            # The moved row occupies the order of the revision that moved it in.
+            rows[event.row.identity] = event.row
         else:
             # Updating an existing dictionary entry preserves its original insertion position.
             rows[event.identity] = replace_measurement(rows[event.identity], event.category, event.liters)

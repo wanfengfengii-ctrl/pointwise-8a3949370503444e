@@ -5,6 +5,10 @@ from warehouse.catalog.partitions import require_identifier
 from warehouse.release.records import LedgerRecords, canonical_ledger_bytes
 
 
+def _valid_digest(digest) -> bool:
+    return type(digest) is str and len(digest) == 64 and all(ch in '0123456789abcdef' for ch in digest)
+
+
 @dataclass(frozen=True)
 class ReleaseManifest:
     release_id: str
@@ -19,9 +23,20 @@ class ReleaseManifest:
         require_identifier(self.partition, 'partition')
         if type(self.revision) is not int or not 0 <= self.revision < 2**63:
             raise ValueError('invalid_release_revision')
-        digest = self.ledger_sha256
-        if type(digest) is not str or len(digest) != 64 or any(ch not in '0123456789abcdef' for ch in digest):
+        if not _valid_digest(self.ledger_sha256):
             raise ValueError('invalid_ledger_digest')
+
+
+@dataclass(frozen=True)
+class TransferManifest(ReleaseManifest):
+    """Manifest of a V2 artifact, which also binds its transfer evidence."""
+
+    transfers_sha256: str
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not _valid_digest(self.transfers_sha256):
+            raise ValueError('invalid_transfer_digest')
 
 
 def ledger_digest(records: LedgerRecords) -> str:
@@ -32,7 +47,22 @@ def build_manifest(release_id, snapshot_id, partition, revision, records: Ledger
     return ReleaseManifest(release_id, snapshot_id, partition, revision, ledger_digest(records))
 
 
+def build_transfer_manifest(release_id, snapshot_id, partition, revision, records: LedgerRecords,
+                            transfers) -> TransferManifest:
+    from warehouse.release.transfers import transfer_digest
+
+    return TransferManifest(release_id, snapshot_id, partition, revision,
+                            ledger_digest(records), transfer_digest(transfers))
+
+
 def parse_manifest(data) -> ReleaseManifest:
     if not isinstance(data, dict) or set(data) != {'release_id', 'snapshot_id', 'partition', 'revision', 'ledger_sha256'}:
         raise ValueError('invalid_release_manifest')
     return ReleaseManifest(**data)
+
+
+def parse_transfer_manifest(data) -> TransferManifest:
+    fields = {'release_id', 'snapshot_id', 'partition', 'revision', 'ledger_sha256', 'transfers_sha256'}
+    if not isinstance(data, dict) or set(data) != fields:
+        raise ValueError('invalid_release_manifest')
+    return TransferManifest(**data)

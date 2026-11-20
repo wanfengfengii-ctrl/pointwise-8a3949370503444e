@@ -15,7 +15,10 @@ class AmendmentReceipt:
 
 
 def amend_row(connection, partition, identity, expected, category, liters) -> AmendmentReceipt:
-    if not isinstance(identity, RowIdentity) or identity.partition != partition:
+    # After a transfer the row keeps its original identity (whose partition is
+    # the move-out partition) but lives in the move-in partition; the lookup in
+    # the requested partition is what decides whether the row is there.
+    if not isinstance(identity, RowIdentity):
         raise ValueError('unknown_row')
     if not isinstance(expected, MeasurementRow):
         raise ValueError('invalid_old_image')

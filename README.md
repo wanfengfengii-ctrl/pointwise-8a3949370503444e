@@ -9,6 +9,13 @@ python3 -B check_project.py
 python3 -B -m examples.shift
 ```
 
+跨区转记的联合核验与演示：
+
+```sh
+python3 -B check_transfer.py
+python3 -B -m examples.transfer_demo
+```
+
 `check_project.py` 由运行平台提供。源码独立导出时也可用 `python3 -B -m unittest discover -v` 运行同一套测试。演练读取 `examples/registry.json` 和 `examples/shift.json`，在临时目录使用独立源库和镜像库。
 
 ## 一次交班
@@ -35,7 +42,9 @@ python3 -B -m examples.shift
 | `freeze` | `warehouse.close.freeze.freeze_partition(db, snapshot_id, partition, revision)` 返回 `FrozenSnapshot`，包含固定账号、区版、原序明细及统计。 |
 | `issue` | `warehouse.release.issue.issue_release(db, release_id, snapshot_id)` 返回 `(IssueReceipt, artifact_bytes)`，可按原发行号和固定账号重领。 |
 | `install` | `warehouse.mirror.admission.install_release(mirror, artifact_bytes)` 返回 `InstallResult(receipt, current_revision)`。重投同件返回原实收及该区实际当前修订。 |
-| `audit` | `warehouse.mirror.read.audit_partition(mirror, partition)` 和 `audit_release(mirror, release_id)` 返回 `AuditResult(manifest, rows, tally)`。 |
+| `audit` | `warehouse.mirror.read.audit_partition(mirror, partition)` 和 `audit_release(mirror, release_id)` 返回 `AuditResult(manifest, rows, tally)`。跨区转记见 MOVE_MIRROR.md。 |
+| `transfer` | `warehouse.facts.transfers.transfer_row(db, transfer_id, from_partition, to_partition, identity, expected)` 返回 `TransferReceipt`，在两区同一次提交中移出一行并追加首执。同号同参重领，异参拒绝。 |
+| `transfer status` | `warehouse.mirror.read.read_transfer_status(mirror, transfer_id)` 返回 `None`、`'pending'` 或 `'complete'`。 |
 
 ## 计量、身份与错误
 
@@ -43,4 +52,6 @@ python3 -B -m examples.shift
 
 V1 件有版本、清单和账面。清单绑定发行号、固定账号、分区、修订和账面的 SHA-256 摘要。摘要用于检验内容完整性。发行和实收保存原发字节。不同发行号可交接同一区版的等同账面。同号实收重投按字节比较，分区同修订按规范账面比较。镜像按实到明细逐类复算并按区独立推进。
 
-业务输入错误和绑定冲突以带原因的 `ValueError` 报告。`unknown_partition` 表示没有对应区账，`unreceived_release` 表示未实收该发行号。`unknown_revision`、`unknown_row` 和 `unknown_snapshot` 分别指源侧缺失的对象。`stale_old_image` 表示旧像不符。存储错误透传 SQLite 异常。新批和勘误分别在一个事务内追加事实，实收与当前指向也共用一个事务。
+涉及跨区转记的发行使用 V2：同一信封再加 `transfers` 列表，清单多一个 `transfers_sha256`。转记共 7 个业务字段加 `current`，按 `(transfer_id, from_partition, to_partition)` 排序后取规范 JSON 的 SHA-256。V1 件的对应摘要为空列表，因此 V1 与 V2 的区分只体现在版本号和清单字段上。详见 MOVE_MIRROR.md。
+
+业务输入错误和绑定冲突以带原因的 `ValueError` 报告。`unknown_partition` 表示没有对应区账，`unreceived_release` 表示未实收该发行号。`unknown_revision`、`unknown_row` 和 `unknown_snapshot` 分别指源侧缺失的对象。`stale_old_image` 表示旧像不符。存储错误透传 SQLite 异常。新批和勘误分别在一个事务内追加事实，实收与当前指向也共用一个事务。转记另见 MOVE_MIRROR.md 的错误约定。
